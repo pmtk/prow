@@ -1,0 +1,55 @@
+name: Nightly Build and Publish clonerefs Binary
+
+on:
+  schedule:
+    # Run every night at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch: # Allow manual triggering
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+            goos: linux
+            goarch: amd64
+          - os: linux
+            arch: arm64
+            goos: linux
+            goarch: arm64
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+
+      - name: Build clonerefs binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          mkdir -p dist
+          BINARY_NAME="clonerefs-${{ matrix.os }}-${{ matrix.arch }}"
+          go build -ldflags="-w -s" -o "dist/${BINARY_NAME}" ./cmd/clonerefs
+
+          cd dist
+          sha256sum "${BINARY_NAME}" > "${BINARY_NAME}.sha256"
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly
+          files: |
+            dist/clonerefs-${{ matrix.os }}-${{ matrix.arch }}*
+          overwrite_files: true
